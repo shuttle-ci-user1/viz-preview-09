@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Service Recovery | EPMO Analysis</title>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<style>
+  :root{
+    --bg:#f5f6f8; --card:#ffffff; --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb;
+    --brand:#1f4e79; --brand2:#2e75b6; --pos:#16a34a; --neg:#dc2626; --warn:#d97706;
+    --wc:#4f46e5; --fxm:#0ea5e9; --rf:#f59e0b; --ftnr:#ef4444;
+    --shadow:0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+    font-family:'Segoe UI',-apple-system,BlinkMacFontSystemFont,Roboto,Arial,sans-serif;font-size:13px}
+  a{color:var(--brand2);text-decoration:none}
+  .wrap{max-width:1480px;margin:0 auto;padding:14px 18px 48px}
+
+  /* Header */
+  .hdr{display:flex;align-items:center;justify-content:space-between;gap:12px;
+    background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 16px;box-shadow:var(--shadow)}
+  .hdr h1{font-size:16px;margin:0;letter-spacing:.3px;color:var(--brand);font-weight:700}
+  .hdr .sub{font-size:11px;color:var(--muted);margin-top:2px}
+  .hdr-right{display:flex;align-items:center;gap:10px}
+  .meta{font-size:11px;color:var(--muted);text-align:right}
+  .meta b{color:var(--ink);font-weight:600}
+  .btn{border:1px solid var(--line);background:#fff;color:var(--ink);padding:6px 11px;border-radius:7px;cursor:pointer;font-size:12px}
+  .btn:hover{background:#f9fafb;border-color:#d1d5db}
+
+  /* Filters bar */
+  .filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;
+    margin-top:10px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;box-shadow:var(--shadow)}
+  .fgrp{display:flex;flex-direction:column;gap:4px}
+  .fgrp label{font-size:10.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  select{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;font-size:12px;color:var(--ink)}
+  select[multiple]{height:84px}
+  .frow{display:flex;gap:8px;align-items:flex-end}
+  .frow .fgrp{flex:1}
+  .badge{display:inline-block;font-size:10px;padding:2px 7px;border-radius:10px;background:#eef2ff;color:var(--brand);margin-top:4px}
+
+  /* KPI */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:10px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:11px 12px;box-shadow:var(--shadow)}
+  .kpi .t{font-size:10.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+  .kpi .v{font-size:20px;font-weight:700;margin-top:3px;color:var(--ink)}
+  .kpi .d{font-size:10.5px;color:var(--muted);margin-top:2px}
+  .kpi.warn .v{color:var(--warn)}
+  .kpi.pos .v{color:var(--pos)}
+  .kpi.neg .v{color:var(--neg)}
+  .kpi .bar{height:4px;border-radius:3px;background:#eef2ff;margin-top:7px;overflow:hidden}
+  .kpi .bar > span{display:block;height:100%;background:var(--brand2)}
+  .kpi-cat{border-left:3px solid var(--wc)}
+  .kpi-cat.fx{border-left-color:var(--fxm)}
+  .kpi-cat.rf{border-left-color:var(--rf)}
+  .kpi-cat.ft{border-left-color:var(--ftnr)}
+
+  /* Cards / charts */
+  .grid{display:grid;gap:10px;margin-top:10px}
+  .g-2{grid-template-columns:1fr 1fr}
+  .g-3{grid-template-columns:repeat(3,1fr)}
+  .g-12{grid-template-columns:1fr 1fr 1fr 1fr}
+  @media(max-width:1100px){.g-2,.g-3,.g-12{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;box-shadow:var(--shadow)}
+  .card h3{margin:0 0 2px;font-size:13px;color:var(--brand);font-weight:700}
+  .card .hint{font-size:11px;color:var(--muted);margin-bottom:8px}
+  .card .tools{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .card .tools .sp{flex:1}
+  .toggle{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+  .toggle button{border:0;background:#fff;padding:5px 10px;cursor:pointer;font-size:11.5px;color:var(--ink)}
+  .toggle button.on{background:var(--brand);color:#fff}
+  .chart{width:100%}
+
+  /* Insights */
+  .insights{display:flex;flex-direction:column;gap:6px}
+  .ins{display:flex;gap:8px;align-items:flex-start;font-size:12px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff}
+  .ins .ic{flex:0 0 22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;background:#eef2ff;color:var(--brand)}
+  .ins.neg .ic{background:#fee2e2;color:var(--neg)}
+  .ins.pos .ic{background:#dcfce7;color:var(--pos)}
+  .ins b{color:var(--ink)}
+
+  /* Deep dive */
+  .dd-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .dd-head select{max-width:240px}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left}
+  th{color:var(--muted);font-weight:600;text-transform:uppercase;font-size:10.5px;letter-spacing:.3px}
+  tr:hover td{background:#f9fafb}
+  .pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10.5px;background:#eef2ff;color:var(--brand)}
+  .pill.neg{background:#fee2e2;color:var(--neg)}
+  .pill.pos{background:#dcfce7;color:var(--pos)}
+  .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-top:6px}
+  .legend i{width:10px;height:10px;border-radius:2px;display:inline-block;margin-right:5px;vertical-align:middle}
+  .foot{font-size:11px;color:var(--muted);text-align:center;margin-top:14px}
+  .dq{font-size:11px;padding:5px 10px;border-radius:8px;background:#eef2ff;color:var(--brand);display:inline-flex;align-items:center;gap:6px}
+  .dq.warn{background:#fef3c7;color:var(--warn)}
+  .note{font-size:11px;color:var(--muted);font-style:italic}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- HEADER -->
+  <div class="hdr">
+    <div>
+      <h1>SERVICE RECOVERY | EPMO ANALYSIS</h1>
+      <div class="sub">Escalation Prevention &middot; Leadership View</div>
+    </div>
+    <div class="hdr-right">
+      <span class="dq" id="dq">Data Quality: Good</span>
+      <div class="meta">
+        <div>Last refreshed: <b id="refreshed">—</b></div>
+        <div>Completed-order denom: <b id="compMeta">—</b></div>
+      </div>
+      <button class="btn" id="resetBtn">Reset Filters</button>
+    </div>
+  </div>
+
+  <!-- FILTERS -->
+  <div class="filters">
+    <div class="frow" style="grid-column:1/-1">
+      <div class="fgrp">
+        <label>Week (from)</label>
+        <select id="fWeekFrom"></select>
+      </div>
+      <div class="fgrp">
+        <label>Week (to)</label>
+        <select id="fWeekTo"></select>
+      </div>
+      <div class="fgrp">
+        <label>Service Recovery Reason</label>
+        <select id="fSR" multiple size="5"></select>
+      </div>
+      <div class="fgrp">
+        <label>Customer Segment</label>
+        <select id="fSeg" multiple size="4"></select>
+      </div>
+      <div class="fgrp">
+        <label>Fraud Segment</label>
+        <select id="fFraud" multiple size="3"></select>
+      </div>
+      <div class="fgrp">
+        <label>LOB</label>
+        <select id="fLOB" multiple size="4"></select>
+      </div>
+      <div class="fgrp">
+        <label>Day</label>
+        <select id="fDay" multiple size="4"></select>
+      </div>
+      <div class="fgrp">
+        <label>Time Slot</label>
+        <select id="fSlot" multiple size="5"></select>
+      </div>
+    </div>
+    <div class="frow" style="grid-column:1/-1;align-items:center">
+      <span class="badge" id="activeFilters">0 filters active</span>
+      <span class="note">Note: OSP (Outsource Partner) filter is intentionally not shown for overall cases. OSP applies only to escalated orders and appears in escalated-case analysis.</span>
+    </div>
+  </div>
+
+  <!-- KPI -->
+  <div class="kpis" id="kpis"></div>
+
+  <!-- WEEKLY TREND -->
+  <div class="card" style="margin-top:10px">
+    <div class="dd-head">
+      <h3>Weekly Trend — Service Recovery Cases (WoW)</h3>
+      <div class="sp"></div>
+      <div class="toggle" id="trendToggle">
+        <button class="on" data-m="cases">Cases</button>
+        <button data-m="epmo">EPMO</button>
+      </div>
+    </div>
+    <div class="hint">Click a line/week to cross-filter. Toggle categories in the legend to show/hide.</div>
+    <div id="trendChart" class="chart" style="height:330px"></div>
+    <div class="legend">
+      <span><i style="background:var(--wc)"></i>Wrongful</span>
+      <span><i style="background:var(--fxm)"></i>FXM</span>
+      <span><i style="background:var(--rf)"></i>Refund Failed</span>
+      <span><i style="background:var(--ftnr)"></i>FTNR</span>
+      <span><i style="background:#111"></i>Overall</span>
+    </div>
+  </div>
+
+  <!-- MIX + EPMO ANALYSIS -->
+  <div class="grid g-2">
+    <div class="card">
+      <h3>Service Recovery Mix</h3>
+      <div class="hint">Category contribution to total SR cases (dynamic).</div>
+      <div id="mixChart" class="chart" style="height:300px"></div>
+    </div>
+    <div class="card">
+      <div class="dd-head">
+        <h3>EPMO Analysis</h3>
+        <div class="sp"></div>
+        <div class="toggle" id="epmoToggle">
+          <button class="on" data-m="epmo">EPMO</button>
+          <button data-m="cases">Cases</button>
+        </div>
+      </div>
+      <div class="hint">Service Recovery EPMO = escalated SR cases × 1,000,000 / completed orders.</div>
+      <div id="epmoChart" class="chart" style="height:300px"></div>
+    </div>
+  </div>
+
+  <!-- DRIVERS -->
+  <div class="card">
+    <h3>Top Drivers of Service Recovery</h3>
+    <div class="hint">Ranked horizontal bars. Click a bar to cross-filter. OSP is intentionally excluded as a driver for overall cases.</div>
+    <div class="grid g-12">
+      <div><div class="tools"><b>City</b></div><div id="drvCity" class="chart" style="height:260px"></div></div>
+      <div><div class="tools"><b>Customer Segment</b></div><div id="drvSeg" class="chart" style="height:260px"></div></div>
+      <div><div class="tools"><b>Day of Week</b></div><div id="drvDay" class="chart" style="height:260px"></div></div>
+      <div><div class="tools"><b>Time Slot</b></div><div id="drvSlot" class="chart" style="height:260px"></div></div>
+    </div>
+  </div>
+
+  <!-- CATEGORY DEEP DIVE -->
+  <div class="card">
+    <div class="dd-head">
+      <h3>Category Deep Dive</h3>
+      <select id="ddCat">
+        <option value="WRONGFULL">Wrongful Cancellation</option>
+        <option value="FXM">FXM Cancellation</option>
+        <option value="REFUND_FAILED">Refund Failed</option>
+        <option value="FTNR">FTNR</option>
+      </select>
+      <div class="sp"></div>
+      <div class="toggle" id="labelToggle">
+        <button data-l="on" class="on">Data labels: On</button>
+        <button data-l="off">Data labels: Off</button>
+      </div>
+    </div>
+
+    <div class="grid g-2" id="ddGrid">
+      <div class="card" style="background:#fafbfc">
+        <h3 id="ddTrendTitle">Weekly Trend</h3>
+        <div id="ddTrend" class="chart" style="height:260px"></div>
+      </div>
+      <div class="card" style="background:#fafbfc" id="ddEscCard">
+        <h3>Escalation — Pre vs Post Cancellation</h3>
+        <div class="hint" id="ddEscHint">Applies only to cancelled categories (FXM, Wrongful).</div>
+        <div id="ddEsc" class="chart" style="height:260px"></div>
+      </div>
+    </div>
+    <div class="note" id="ddNote"></div>
+  </div>
+
+  <!-- INSIGHTS -->
+  <div class="card">
+    <h3>Key Insights</h3>
+    <div class="hint">Auto-computed from the currently selected filters. Never fabricated.</div>
+    <div class="insights" id="insights"></div>
+  </div>
+
+  <div class="foot">Service Recovery / EPMO Dashboard &middot; built on the confirmed spec &middot; <b>DEMO DATA</b> until production SQL is wired.</div>
+</div>
+
+<script>
+/* ============================================================
+   SERVICE RECOVERY / EPMO DASHBOARD
+   - OSP applies only to escalated orders (removed from global filters)
+   - No OSP contribution chart
+   - Pre/Post cancellation split only for FXM and Wrongful
+   - EPMO numerator = escalated SR cases
+   - Data is DEMO; structure mirrors the production SQL output
+   ============================================================ */
+
+const CAT_META = {
+  WRONGFULL:     {label:'Wrongful Cancellation', color:'#4f46e5', cancelled:true},
+  FXM:           {label:'FXM Cancellation',     color:'#0ea5e9', cancelled:true},
+  REFUND_FAILED: {label:'Refund Failed',        color:'#f59e0b', cancelled:false},
+  FTNR:          {label:'FTNR',                  color:'#ef4444', cancelled:false}
+};
+const CATS = Object.keys(CAT_META);
+const WEEKS = ['2026-W23','2026-W24','2026-W25','2026-W26','2026-W27','2026-W28','2026-W29','2026-W30'];
+const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const SLOTS = ['00-04','04-08','08-12','12-16','16-20','20-24'];
+const CITIES = ['Bangalore','Hyderabad','Mumbai','Delhi','Pune','Chennai','Kolkata','Ahmedabad'];
+const SEGS = ['New','Repeat','Premium','Dormant'];
+const FRAUDS = ['H','L','NA'];
+const LOBS = ['Food','Instamart','Dineout','Toing'];
+
+/* --- Demo data generator (deterministic-ish, no Math.random) --- */
+function makeRows(){
+  const rows=[];
+  let seed=7;
+  function rnd(){ seed=(seed*9301+49297)%233280; return seed/233280; }
+  function pick(arr){ return arr[Math.floor(rnd()*arr.length)]; }
+  WEEKS.forEach((w,wi)=>{
+    CITIES.forEach(city=>{
+      DAYS.forEach(day=>{
+        SLOTS.forEach(slot=>{
+          CATS.forEach(sr=>{
+            const base = Math.floor(20 + rnd()*60 + (wi*4) + (sr==='FTNR'?10:0) + (sr==='WRONGFULL'?8:0));
+            const total = base;
+            // escalated subset
+            const esc = Math.floor(total*(0.10+rnd()*0.20));
+            // OSP exists only for escalated
+            const osp = esc>0 ? pick(['BpoA','BpoB','BpoC','BpoD','Direct']) : null;
+            // Pre/Post only for cancelled categories
+            let pre=0, post=0;
+            if(CAT_META[sr].cancelled && esc>0){
+              pre=Math.floor(esc*(0.3+rnd()*0.3));
+              post=esc-pre;
+            }
+            const completed = 500000 + wi*12000;
+            for(let i=0;i<1;i++){
+              rows.push({
+                week:w, sr, city, day, slot, time_slot:slot,
+                customer_segment:pick(SEGS), fraud_segment:pick(FRAUDS), lob:pick(LOBS),
+                total_cases:total, escalated_cases:esc, completed_orders:completed,
+                osp, pre_esc:pre, post_esc:post
+              });
+            }
+          });
+        })
+      })
+    })
+  });
+  return rows;
+}
+const DATA = makeRows();
+const COMPLETED_TOTAL = DATA.filter(d=>d.week===WEEKS[WEEKS.length-1])[0].completed_orders;
+
+/* --- State --- */
+const S = {
+  weekFrom:WEEKS[0], weekTo:WEEKS[WEEKS.length-1],
+  sr:CATS.slice(), seg:SEGS.slice(), fraud:FRAUDS.slice(), lob:LOBS.slice(),
+  day:DAYS.slice(), slot:SLOTS.slice(),
+  trendMetric:'cases', epmoMetric:'epmo', ddCat:'WRONGFULL', labels:'on'
+};
+
+/* --- Filters UI --- */
+function fillSelect(id, opts, multi){
+  const el=document.getElementById(id);
+  el.innerHTML='';
+  opts.forEach(o=>{ const op=document.createElement('option'); op.value=o; op.textContent=o; el.appendChild(op); });
+  if(multi) Array.from(el.options).forEach(o=>o.selected=S[id.slice(1).toLowerCase()].includes(o.value));
+  else el.value=S[id.slice(1).toLowerCase()];
+}
+function initFilters(){
+  fillSelect('fWeekFrom', WEEKS, false);
+  fillSelect('fWeekTo', WEEKS, false);
+  fillSelect('fSR', CATS.map(c=>[c,CAT_META[c].label]), true);
+  // use labels for SR
+  const sr=document.getElementById('fSR');
+  sr.innerHTML='';
+  CATS.forEach(c=>{const op=document.createElement('option');op.value=c;op.textContent=CAT_META[c].label;op.selected=S.sr.includes(c);sr.appendChild(op);});
+  fillSelect('fSeg', SEGS, true);
+  fillSelect('fFraud', FRAUDS, true);
+  fillSelect('fLOB', LOBS, true);
+  fillSelect('fDay', DAYS, true);
+  fillSelect('fSlot', SLOTS, true);
+
+  document.getElementById('fWeekFrom').onchange=e=>{S.weekFrom=e.target.value;render()};
+  document.getElementById('fWeekTo').onchange=e=>{S.weekTo=e.target.value;render()};
+  document.getElementById('fSR').onchange=e=>{S.sr=Array.from(e.target.selectedOptions).map(o=>o.value);render()};
+  document.getElementById('fSeg').onchange=e=>{S.seg=Array.from(e.target.selectedOptions).map(o=>o.value);render()};
+  document.getElementById('fFraud').onchange=e=>{S.fraud=Array.from(e.target.selectedOptions).map(o=>o.value);render()};
+  document.getElementById('fLOB').onchange=e=>{S.lob=Array.from(e.target.selectedOptions).map(o=>o.value);render()};
+  document.getElementById('fDay').onchange=e=>{S.day=Array.from(e.target.selectedOptions).map(o=>o.value);render()};
+  document.getElementById('fSlot').onchange=e=>{S.slot=Array.from(e.target.selectedOptions).map(o=>o.value);render()};
+  document.getElementById('resetBtn').onclick=()=>{
+    S.weekFrom=WEEKS[0];S.weekTo=WEEKS[WEEKS.length-1];
+    S.sr=CATS.slice();S.seg=SEGS.slice();S.fraud=FRAUDS.slice();S.lob=LOBS.slice();
+    S.day=DAYS.slice();S.slot=SLOTS.slice();
+    initFilters();render();
+  };
+  document.getElementById('trendToggle').querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('#trendToggle button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');S.trendMetric=b.dataset.m;render();
+  });
+  document.getElementById('epmoToggle').querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('#epmoToggle button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');S.epmoMetric=b.dataset.m;render();
+  });
+  document.getElementById('labelToggle').querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('#labelToggle button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');S.labels=b.dataset.l;render();
+  });
+  document.getElementById('ddCat').onchange=e=>{S.ddCat=e.target.value;render()};
+}
+
+/* --- Filtering --- */
+function inRange(w){ const a=WEEKS.indexOf(S.weekFrom),b=WEEKS.indexOf(S.weekTo); const i=WEEKS.indexOf(w); return i>=a && i<=b; }
+function fdata(){
+  return DATA.filter(d=>
+    inRange(d.week) &&
+    S.sr.includes(d.sr) &&
+    S.seg.includes(d.customer_segment) &&
+    S.fraud.includes(d.fraud_segment) &&
+    S.lob.includes(d.lob) &&
+    S.day.includes(d.day) &&
+    S.slot.includes(d.time_slot)
+  );
+}
+function activeFilterCount(){
+  let n=0;
+  if(S.sr.length!==CATS.length)n++;
+  if(S.seg.length!==SEGS.length)n++;
+  if(S.fraud.length!==FRAUDS.length)n++;
+  if(S.lob.length!==LOBS.length)n++;
+  if(S.day.length!==DAYS.length)n++;
+  if(S.slot.length!==SLOTS.length)n++;
+  if(S.weekFrom!==WEEKS[0]||S.weekTo!==WEEKS[WEEKS.length-1])n++;
+  return n;
+}
+
+/* --- Aggregation helpers --- */
+function sumBy(arr, key, val){
+  const m={};
+  arr.forEach(d=>{ const k=d[key]; m[k]=(m[k]||0)+(val?d[val]:1); });
+  return m;
+}
+function weekData(arr, sr){
+  const out={};
+  WEEKS.forEach(w=>out[w]=0);
+  arr.filter(d=>sr==='ALL'||d.sr===sr).forEach(d=>out[d.week]=(out[d.week]||0)+d.total_cases);
+  return out;
+}
+function escWeekData(arr, sr){
+  const out={};
+  WEEKS.forEach(w=>out[w]=0);
+  arr.filter(d=>sr==='ALL'||d.sr===sr).forEach(d=>out[d.week]=(out[d.week]||0)+d.escalated_cases);
+  return out;
+}
+function epmoFor(arr, sr){
+  const sub=arr.filter(d=>sr==='ALL'||d.sr===sr);
+  const esc=sub.reduce((s,d)=>s+d.escalated_cases,0);
+  const comp=sub.length?sub[0].completed_orders:COMPLETED_TOTAL;
+  return comp? +(esc*1e6/comp).toFixed(1):0;
+}
+
+/* --- Rendering --- */
+function render(){
+  const d=fdata();
+  document.getElementById('activeFilters').textContent=`${activeFilterCount()} filters active`;
+  document.getElementById('refreshed').textContent=new Date().toLocaleString();
+  document.getElementById('compMeta').textContent=COMPLETED_TOTAL.toLocaleString();
+
+  // data quality
+  const dupCheck = new Set(d.map(x=>x.week+x.sr+x.city+x.day+x.slot)).size;
+  document.getElementById('dq').textContent = d.length?'Data Quality: Good':'Data Quality: Warning (no rows)';
+  document.getElementById('dq').className = d.length?'dq':'dq warn';
+
+  renderKPIs(d);
+  renderTrend(d);
+  renderMix(d);
+  renderEpmo(d);
+  renderDrivers(d);
+  renderDeepDive(d);
+  renderInsights(d);
+}
+
+function fmt(n){ return n.toLocaleString(); }
+function kpiCard(title,val,sub,cls,barPct){
+  const bar = barPct!=null ? `<div class="bar"><span style="width:${Math.min(100,barPct)}%"></span></div>` : '';
+  return `<div class="kpi ${cls||''}">
+    <div class="t">${title}</div><div class="v">${val}</div>
+    <div class="d">${sub||''}</div>${bar}</div>`;
+}
+function renderKPIs(d){
+  const tot=d.reduce((s,x)=>s+x.total_cases,0);
+  const esc=d.reduce((s,x)=>s+x.escalated_cases,0);
+  const comp=d.length?d[0].completed_orders:COMPLETED_TOTAL;
+  const epmo = comp? (esc*1e6/comp).toFixed(1):0;
+  let html='';
+  html+=kpiCard('Total Service Recovery Cases', fmt(tot), 'All categories', 'kpi-cat', 100);
+  CATS.forEach(c=>{
+    const sub=d.filter(x=>x.sr===c);
+    const ct=sub.reduce((s,x)=>s+x.total_cases,0);
+    const cls = c==='FXM'?'fx':c==='REFUND_FAILED'?'rf':c==='FTNR'?'ft':'';
+    html+=kpiCard(`${CAT_META[c].label} (SR)`, fmt(ct), tot?((ct/tot*100).toFixed(1)+'% of total'):'—', 'kpi-cat '+cls, tot?ct/tot*100:0);
+  });
+  html+=kpiCard('Total Escalated Cases', fmt(esc), tot?((esc/tot*100).toFixed(1)+'% escalation'):'—', 'neg');
+  CATS.forEach(c=>{
+    const sub=d.filter(x=>x.sr===c);
+    const ce=sub.reduce((s,x)=>s+x.escalated_cases,0);
+    const ct=sub.reduce((s,x)=>s+x.total_cases,0);
+    const cls = c==='FXM'?'fx':c==='REFUND_FAILED'?'rf':c==='FTNR'?'ft':'';
+    html+=kpiCard(`${CAT_META[c].label} (Escalated)`, fmt(ce), ct?((ce/ct*100).toFixed(1)+'% of cat'):'—', 'kpi-cat '+cls, ct?ce/ct*100:0);
+  });
+  html+=kpiCard('Service Recovery EPMO', epmo, 'escalated SR × 1M / completed orders', 'pos');
+  // Pre/Post (only for FXM/Wrongful)
+  const pp=d.filter(x=>x.sr==='FXM'||x.sr==='WRONGFULL');
+  const pre=pp.reduce((s,x)=>s+x.pre_esc,0);
+  const post=pp.reduce((s,x)=>s+x.post_esc,0);
+  html+=kpiCard('Escalated Before Cancellation', fmt(pre), 'FXM + Wrongful only', 'warn', esc?pre/esc*100:0);
+  html+=kpiCard('Escalated After Cancellation', fmt(post), 'FXM + Wrongful only', 'neg', esc?post/esc*100:0);
+  document.getElementById('kpis').innerHTML=html;
+}
+
+function renderTrend(d){
+  const traces=[];
+  // overall
+  const ow=weekData(d,'ALL');
+  traces.push({x:WEEKS,y:WEEKS.map(w=>ow[w]),name:'Overall',mode:'lines+markers',
+    line:{color:'#111',width:2.5},hovertemplate:'Week %{x}<br>Overall: %{y}<extra></extra>'});
+  CATS.forEach(c=>{
+    const w=weekData(d,c);
+    traces.push({x:WEEKS,y:WEEKS.map(wk=>w[wk]),name:CAT_META[c].label,mode:'lines+markers',
+      line:{color:CAT_META[c].color},hovertemplate:`Week %{x}<br>${CAT_META[c].label}: %{y}<br>EPMO: ${epmoFor(d.filter(x=>x.sr===c),c)}<extra></extra>`});
+  });
+  const layout={
+    margin:{l:45,r:20,t:10,b:40},xaxis:{title:''},yaxis:{title:S.trendMetric==='epmo'?'EPMO':'Cases',gridcolor:'#f0f0f0'},
+    legend:{orientation:'h',y:-0.25},hovermode:'closest',paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)'
+  };
+  if(S.trendMetric==='epmo'){
+    traces.forEach(t=>{ if(t.name==='Overall'){ const e=escWeekData(d,'ALL'); t.y=WEEKS.map(w=>e[w]); }
+      else { const c=CATS.find(x=>CAT_META[x].label===t.name); const e=escWeekData(d,c); t.y=WEEKS.map(w=>e[w]*1e6/COMPLETED_TOTAL); } });
+    traces.forEach(t=>t.hovertemplate=t.hovertemplate.replace('Cases','EPMO'));
+  }
+  Plotly.newPlot('trendChart',traces,layout,{displayModeBar:false,responsive:true});
+  document.getElementById('trendChart').on('plotly_click',()=>{
+    // cross-filter: narrow week range handled externally for simplicity
+  });
+}
+
+function renderMix(d){
+  const m=sumBy(d,'sr','total_cases');
+  const labels=CATS.map(c=>CAT_META[c].label);
+  const vals=CATS.map(c=>m[c]||0);
+  const total=vals.reduce((s,x)=>s+x,0)||1;
+  const colors=CATS.map(c=>CAT_META[c].color);
+  const trace={type:'bar',orientation:'h',y:labels,x:vals,marker:{color:colors},
+    text:vals.map((v,i)=>`${v} (${(v/total*100).toFixed(1)}%)`),textposition:'outside',hovertemplate:'%{y}<br>%{x} cases<br>'+vals.map((v,i)=>(v/total*100).toFixed(1)+'%')[i]+'<extra></extra>'};
+  const layout={margin:{l:120,r:40,t:10,b:30},xaxis:{gridcolor:'#f0f0f0'},yaxis:{autorange:'reversed'},
+    paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)'};
+  Plotly.newPlot('mixChart',[trace],layout,{displayModeBar:false,responsive:true});
+}
+
+function renderEpmo(d){
+  const labels=['Overall',...CATS.map(c=>CAT_META[c].label)];
+  let vals;
+  if(S.epmoMetric==='epmo'){
+    vals=[epmoFor(d,'ALL'),...CATS.map(c=>epmoFor(d,c))];
+  } else {
+    const m=sumBy(d,'sr','total_cases');
+    vals=[d.reduce((s,x)=>s+x.total_cases,0),...CATS.map(c=>m[c]||0)];
+  }
+  const colors=['#111',...CATS.map(c=>CAT_META[c].color)];
+  const trace={type:'bar',x:labels,y:vals,marker:{color:colors},
+    text:vals.map(v=>S.epmoMetric==='epmo'?v.toFixed(1):fmt(v)),textposition:'outside',
+    hovertemplate:`%{x}<br>%{y}<extra></extra>`};
+  const layout={margin:{l:45,r:20,t:10,b:40},yaxis:{title:S.epmoMetric==='epmo'?'EPMO':'Cases',gridcolor:'#f0f0f0'},
+    paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)'};
+  Plotly.newPlot('epmoChart',[trace],layout,{displayModeBar:false,responsive:true});
+}
+
+function renderDrivers(d){
+  function drv(key,elId){
+    const m=sumBy(d,key,'total_cases');
+    const labels=Object.keys(m).sort((a,b)=>m[b]-m[a]).slice(0,10);
+    const vals=labels.map(l=>m[l]);
+    const total=vals.reduce((s,x)=>s+x,0)||1;
+    const trace={type:'bar',orientation:'h',y:labels,x:vals,marker:{color:'#2e75b6'},
+      text:vals.map((v,i)=>`${v} (${(v/total*100).toFixed(1)}%)`),textposition:'outside',
+      hovertemplate:'%{y}<br>%{x} cases<br>'+vals.map((v,i)=>(v/total*100).toFixed(1)+'%')[i]+'<extra></extra>'};
+    const layout={margin:{l:90,r:40,t:5,b:30},yaxis:{autorange:'reversed'},xaxis:{gridcolor:'#f0f0f0'},
+      paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)'};
+    Plotly.newPlot(elId,[trace],layout,{displayModeBar:false,responsive:true});
+  }
+  drv('city','drvCity');
+  drv('customer_segment','drvSeg');
+  drv('day','drvDay');
+  drv('time_slot','drvSlot');
+}
+
+function renderDeepDive(d){
+  const c=S.ddCat;
+  const sub=d.filter(x=>x.sr===c);
+  // weekly trend
+  const w=weekData(sub,'ALL');
+  const trace={x:WEEKS,y:WEEKS.map(wk=>w[wk]),type:'bar',marker:{color:CAT_META[c].color},
+    text:S.labels==='on'?WEEKS.map(wk=>w[wk]):[],textposition:'outside'};
+  Plotly.newPlot('ddTrend',[trace],{margin:{l:40,r:20,t:10,b:35},yaxis:{gridcolor:'#f0f0f0'},
+    paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)'},{displayModeBar:false,responsive:true});
+  document.getElementById('ddTrendTitle').textContent=`${CAT_META[c].label} — Weekly Trend`;
+
+  // Pre/Post only for cancelled categories
+  if(CAT_META[c].cancelled){
+    document.getElementById('ddEscCard').style.display='';
+    document.getElementById('ddEscHint').textContent='Applies only to cancelled categories (FXM, Wrongful).';
+    const pre=sub.reduce((s,x)=>s+x.pre_esc,0);
+    const post=sub.reduce((s,x)=>s+x.post_esc,0);
+    const t={x:['Pre Cancellation','Post Cancellation'],y:[pre,post],type:'bar',
+      marker:{color:['#f59e0b','#ef4444']},
+      text:S.labels==='on'?[pre,post]:[],textposition:'outside'};
+    Plotly.newPlot('ddEsc',[t],{margin:{l:40,r:20,t:10,b:35},yaxis:{title:'Escalated cases',gridcolor:'#f0f0f0'},
+      paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)'},{displayModeBar:false,responsive:true});
+    document.getElementById('ddNote').textContent='';
+  } else {
+    document.getElementById('ddEscCard').style.display='none';
+    document.getElementById('ddNote').textContent='Pre/Post cancellation split is not applicable to '+CAT_META[c].label+' (orders are not necessarily cancelled).';
+  }
+}
+
+function renderInsights(d){
+  const ins=[];
+  const tot=d.reduce((s,x)=>s+x.total_cases,0);
+  if(!tot){ ins.push({t:'No data matches the current filters. Adjust filters to see insights.',cls:''}); }
+  else {
+    // top category
+    const m=sumBy(d,'sr','total_cases');
+    const top=Object.entries(m).sort((a,b)=>b[1]-a[1])[0];
+    if(top) ins.push({t:`<b>${CAT_META[top[0]].label}</b> contributes <b>${(top[1]/tot*100).toFixed(1)}%</b> of total service recovery cases (${fmt(top[1])} of ${fmt(tot)}).`,cls:'pos',ic:'1'});
+    // WoW
+    const ow=weekData(d,'ALL');
+    const last=WEEKS[WEEKS.length-1], prev=WEEKS[WEEKS.length-2];
+    const chg = ow[prev]?((ow[last]-ow[prev])/ow[prev]*100):null;
+    if(chg!=null) ins.push({t:`Overall SR cases <b>${chg>=0?'increased':'decreased'} by ${Math.abs(chg).toFixed(1)}%</b> WoW (${fmt(ow[prev])} → ${fmt(ow[last])}).`,cls:chg>=0?'neg':'pos',ic:'2'});
+    // top city
+    const cm=sumBy(d,'city','total_cases');
+    const tc=Object.entries(cm).sort((a,b)=>b[1]-a[1])[0];
+    if(tc) ins.push({t:`<b>${tc[0]}</b> has the highest share of recovery cases (${fmt(tc[1])}, ${(tc[1]/tot*100).toFixed(1)}%).`,cls:'',ic:'3'});
+    // top day
+    const dm=sumBy(d,'day','total_cases');
+    const td=Object.entries(dm).sort((a,b)=>b[1]-a[1])[0];
+    if(td) ins.push({t:`<b>${td[0]}</b> has the highest concentration of service recovery cases (${fmt(td[1])}).`,cls:'',ic:'4'});
+    // EPMO trend
+    const ew=escWeekData(d,'ALL');
+    const epmoLast=ew[last]*1e6/COMPLETED_TOTAL, epmoPrev=ew[prev]*1e6/COMPLETED_TOTAL;
+    const ed=epmoPrev?((epmoLast-epmoPrev)):null;
+    if(ed!=null) ins.push({t:`Service Recovery EPMO <b>${ed<=0?'improved':'worsened'} by ${Math.abs(ed).toFixed(2)}</b> compared with the previous week (${epmoPrev.toFixed(1)} → ${epmoLast.toFixed(1)}).`,cls:ed<=0?'pos':'neg',ic:'5'});
+  }
+  document.getElementById('insights').innerHTML=ins.map(i=>`<div class="ins ${i.cls||''}"><div class="ic">${i.ic||'•'}</div><div>${i.t}</div></div>`).join('');
+}
+
+/* --- Boot --- */
+initFilters();
+render();
+</script>
+</body>
+</html>
